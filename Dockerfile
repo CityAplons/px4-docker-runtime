@@ -65,6 +65,7 @@ WORKDIR $HOME
 RUN git clone --depth 1 --branch $PX4_TAG --recurse-submodules https://github.com/PX4/PX4-Autopilot.git
 RUN git clone --depth 1 --branch $ARDUPILOT_TAG --recurse-submodules https://github.com/ArduPilot/ardupilot.git
 RUN git clone --depth 1 --recurse-submodules https://github.com/PX4/Firmware.git
+RUN wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage
 
 ENV GZ_VERSION garden
 RUN sudo bash -c 'wget https://raw.githubusercontent.com/osrf/osrf-rosdep/master/gz/00-gazebo.list -O /etc/ros/rosdep/sources.list.d/00-gazebo.list'
