@@ -1,13 +1,11 @@
+FROM px4io/px4-dev-ros-noetic AS base
+ENV DEBIAN_FRONTEND noninteractive
+SHELL [ "/bin/bash", "-o", "pipefail", "-c" ]
+
 ARG UNAME=px4dev
 ARG UID=1000
 ARG GID=1000
-ARG USE_NVIDIA
-ARG PX4_TAG="v1.15.2"
-ARG ARDUPILOT_TAG="Copter-4.5.7"
-
-FROM px4io/px4-dev-ros-noetic as base
-ENV DEBIAN_FRONTEND noninteractive
-SHELL [ "/bin/bash", "-o", "pipefail", "-c" ]
+ARG USE_NVIDIA=1
 
 # System Dependencies
 RUN apt-get update \
@@ -37,13 +35,13 @@ RUN apt-get update \
 RUN sudo pip install PyYAML MAVProxy
 
 # User vars
-RUN export uid=${UID} gid=${GID} && \
-    mkdir -p /home/${UNAME} && \
+RUN export uid=$UID gid=$GID && \
+    mkdir -p /home/$UNAME && \
     echo "${UNAME}:x:${UID}:${GID}:${UNAME},,,:/home/${UNAME}:/bin/bash" >> /etc/passwd && \
     echo "${UNAME}:x:${UID}:" >> /etc/group && \
-    echo "${UNAME} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${UNAME} && \
-    chmod 0440 /etc/sudoers.d/${UNAME} && \
-    chown ${UID}:${GID} -R /home/${UNAME}
+    echo "${UNAME} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$UNAME && \
+    chmod 0440 /etc/sudoers.d/$UNAME && \
+    chown $UID:$GID -R /home/$UNAME
 ENV HOME /home/$UNAME
 USER $UNAME
 
@@ -62,13 +60,20 @@ RUN if [[ -z "${USE_NVIDIA}" ]] ;\
 
 FROM base AS sources
 WORKDIR $HOME
+
+ARG PX4_TAG="v1.15.2"
+ARG ARDUPILOT_TAG="Copter-4.5.7"
+
 RUN git clone --depth 1 --branch $PX4_TAG --recurse-submodules https://github.com/PX4/PX4-Autopilot.git
 RUN git clone --depth 1 --branch $ARDUPILOT_TAG --recurse-submodules https://github.com/ArduPilot/ardupilot.git
-RUN git clone --depth 1 --recurse-submodules https://github.com/PX4/Firmware.git
 RUN wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage
 
 ENV GZ_VERSION garden
-RUN sudo bash -c 'wget https://raw.githubusercontent.com/osrf/osrf-rosdep/master/gz/00-gazebo.list -O /etc/ros/rosdep/sources.list.d/00-gazebo.list'
+
+USER root
+RUN bash -c 'wget https://raw.githubusercontent.com/osrf/osrf-rosdep/master/gz/00-gazebo.list -O /etc/ros/rosdep/sources.list.d/00-gazebo.list'
+USER $UNAME
+
 RUN rosdep update
 RUN rosdep resolve gz-garden
 RUN git clone --depth 1 --recurse-submodules https://github.com/ArduPilot/ardupilot_gazebo
