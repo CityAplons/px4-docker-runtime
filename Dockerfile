@@ -2,13 +2,15 @@ FROM px4io/px4-dev-ros-noetic AS base
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL [ "/bin/bash", "-o", "pipefail", "-c" ]
 
-ARG UNAME=px4dev
+ARG UNAME=sim
 ARG USE_NVIDIA=1
 
 # System Dependencies
 RUN apt-get update \
     && apt-get install -y -qq --no-install-recommends \
+    python-is-python3 \
     apt-utils \
+    byobu \
     fuse \
     git \
     libxext6 \
@@ -26,6 +28,7 @@ RUN apt-get update \
     iputils-ping \
     nano \
     wget \
+    gz-garden \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps
@@ -39,6 +42,7 @@ ENV HOME=/home/$UNAME
 USER $UNAME
 
 # ROS vars
+RUN echo "export GZ_VERSION='garden'" >> ~/.bashrc
 RUN echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 
 # Nvidia GPU vars
@@ -51,17 +55,24 @@ RUN if [[ -z "${USE_NVIDIA}" ]] ;\
     else echo "Native rendering support disabled" ;\
     fi
 
-FROM base AS sources
+FROM base AS sys_deps
 WORKDIR $HOME
-COPY --chown=$UNAME:$UNAME sys_deps.sh ./
+COPY --chown=$UNAME:$UNAME scripts/sys_deps.sh ./
 RUN ./sys_deps.sh
-WORKDIR $HOME/catkin_ws/src
-COPY --chown=$UNAME:$UNAME ws_deps.sh ./
+
+FROM sys_deps AS build_sys_deps
+WORKDIR $HOME
+COPY --chown=$UNAME:$UNAME scripts/build_ardupilot_gazebo.sh ./
+RUN ./build_ardupilot_gazebo.sh
+
+FROM build_sys_deps AS build_ros
+WORKDIR $HOME/thirdparty_ws/src
+COPY --chown=$UNAME:$UNAME scripts/ws_deps.sh ./
 RUN ./ws_deps.sh
+WORKDIR $HOME/thirdparty_ws
+RUN source /opt/ros/noetic/setup.bash && catkin_make
+RUN echo "source ${HOME}/thirdparty_ws/devel/setup.bash --extend" >> ~/.bashrc
 
-FROM sources AS build_deps
-# TODO: build
-
-FROM build_deps AS build_ros
-# TODO: build
-RUN echo "source ${HOME}/catkin_ws/devel/setup.bash --extend" >> ~/.bashrc
+FROM build_ros AS final
+WORKDIR $HOME/volumed_ws
+RUN echo "source ${HOME}/volumed_ws/devel/setup.bash --extend 2> /dev/null" >> ~/.bashrc

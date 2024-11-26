@@ -1,0 +1,13 @@
+.idea
+.vscode
+__pycache__
+*.bag
+*.pyc
+*.save*
+*.sqlite3
+*.sqlite3*
+.swp
+venv
+
+devel/
+build/
