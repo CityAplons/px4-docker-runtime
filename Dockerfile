@@ -1,10 +1,8 @@
 FROM px4io/px4-dev-ros-noetic AS base
-ENV DEBIAN_FRONTEND noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 SHELL [ "/bin/bash", "-o", "pipefail", "-c" ]
 
 ARG UNAME=px4dev
-ARG UID=1000
-ARG GID=1000
 ARG USE_NVIDIA=1
 
 # System Dependencies
@@ -21,7 +19,6 @@ RUN apt-get update \
     libegl1 \
     libfuse-dev \
     libpulse-mainloop-glib0 \
-    libgz-sim7-dev \
     rapidjson-dev \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-libav \ 
@@ -34,15 +31,11 @@ RUN apt-get update \
 # Python deps
 RUN sudo pip install PyYAML MAVProxy
 
-# User vars
-RUN export uid=$UID gid=$GID && \
-    mkdir -p /home/$UNAME && \
-    echo "${UNAME}:x:${UID}:${GID}:${UNAME},,,:/home/${UNAME}:/bin/bash" >> /etc/passwd && \
-    echo "${UNAME}:x:${UID}:" >> /etc/group && \
-    echo "${UNAME} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/$UNAME && \
-    chmod 0440 /etc/sudoers.d/$UNAME && \
-    chown $UID:$GID -R /home/$UNAME
-ENV HOME /home/$UNAME
+# User
+RUN adduser --disabled-password --gecos '' $UNAME
+RUN adduser $UNAME sudo
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+ENV HOME=/home/$UNAME
 USER $UNAME
 
 # ROS vars
@@ -51,8 +44,8 @@ RUN echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 # Nvidia GPU vars
 # Please, refer to https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 # And use nvidia-contairnerd-toolkit for better performance
-ENV NVIDIA_VISIBLE_DEVICES all
-ENV NVIDIA_DRIVER_CAPABILITIES graphics,utility,compute
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=graphics,utility,compute
 RUN if [[ -z "${USE_NVIDIA}" ]] ;\
     then printf "export QT_GRAPHICSSYSTEM=native" >> /home/${UNAME}/.bashrc ;\
     else echo "Native rendering support disabled" ;\
@@ -60,26 +53,11 @@ RUN if [[ -z "${USE_NVIDIA}" ]] ;\
 
 FROM base AS sources
 WORKDIR $HOME
-
-ARG PX4_TAG="v1.15.2"
-ARG ARDUPILOT_TAG="Copter-4.5.7"
-
-RUN git clone --depth 1 --branch $PX4_TAG --recurse-submodules https://github.com/PX4/PX4-Autopilot.git
-RUN git clone --depth 1 --branch $ARDUPILOT_TAG --recurse-submodules https://github.com/ArduPilot/ardupilot.git
-RUN wget https://d176tv9ibo4jno.cloudfront.net/latest/QGroundControl.AppImage
-
-ENV GZ_VERSION garden
-
-USER root
-RUN bash -c 'wget https://raw.githubusercontent.com/osrf/osrf-rosdep/master/gz/00-gazebo.list -O /etc/ros/rosdep/sources.list.d/00-gazebo.list'
-USER $UNAME
-
-RUN rosdep update
-RUN rosdep resolve gz-garden
-RUN git clone --depth 1 --recurse-submodules https://github.com/ArduPilot/ardupilot_gazebo
-
+COPY --chown=$UNAME:$UNAME sys_deps.sh ./
+RUN ./sys_deps.sh
 WORKDIR $HOME/catkin_ws/src
-RUN git clone --depth 1 --recurse-submodules https://github.com/RuslanAgishev/px4_control/
+COPY --chown=$UNAME:$UNAME ws_deps.sh ./
+RUN ./ws_deps.sh
 
 FROM sources AS build_deps
 # TODO: build
